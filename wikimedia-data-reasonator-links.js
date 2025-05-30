@@ -37,29 +37,34 @@
     }
 
     function getWikidataEntity() {
-        // For Wikidata pages
-        if (mw.config.get('wgDBname') === 'wikidatawiki') {
-            const pageTitle = mw.config.get('wgPageName');
-            if (pageTitle.match(/^Q\d+$/)) {
-                return pageTitle;
+        try {
+            // For Wikidata pages
+            if (mw.config.get('wgDBname') === 'wikidatawiki') {
+                const pageTitle = mw.config.get('wgPageName');
+                if (pageTitle.match(/^Q\d+$/)) {
+                    return pageTitle;
+                }
+                return null;
             }
+
+            // For Commons files
+            if (mw.config.get('wgDBname') === 'commonswiki' && mw.config.get('wgNamespaceNumber') === 6) {
+                return getCommonsWikidataItems();
+            }
+
+            // For Wikipedia and other projects
+            const $wikibaseLink = $('#t-wikibase a');
+            if ($wikibaseLink.length) {
+                const href = $wikibaseLink.attr('href');
+                const match = href.match(/\/wiki\/(Q\d+)$/);
+                return match ? match[1] : null;
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error in getWikidataEntity:', error);
             return null;
         }
-
-        // For Commons files
-        if (mw.config.get('wgDBname') === 'commonswiki' && mw.config.get('wgNamespaceNumber') === 6) {
-            return getCommonsWikidataItems();
-        }
-
-        // For Wikipedia and other projects
-        const $wikibaseLink = $('#t-wikibase a');
-        if ($wikibaseLink.length) {
-            const href = $wikibaseLink.attr('href');
-            const match = href.match(/\/wiki\/(Q\d+)$/);
-            return match ? match[1] : null;
-        }
-
-        return null;
     }
 
     async function getCommonsWikidataItems() {
@@ -109,23 +114,27 @@
                 
                 // Get Wikidata IDs for the Wikipedia pages
                 for (const title of wikiTitles) {
-                    const wikiResponse = await $.get(
-                        'https://en.wikipedia.org/w/api.php',
-                        {
-                            action: 'query',
-                            prop: 'pageprops',
-                            titles: title,
-                            format: 'json',
-                            origin: '*'
+                    try {
+                        const wikiResponse = await $.get(
+                            'https://en.wikipedia.org/w/api.php',
+                            {
+                                action: 'query',
+                                prop: 'pageprops',
+                                titles: title,
+                                format: 'json',
+                                origin: '*'
+                            }
+                        );
+                        
+                        const wikiPages = Object.values(wikiResponse.query.pages)[0];
+                        if (wikiPages.pageprops && wikiPages.pageprops.wikibase_item) {
+                            items.usage.push({
+                                id: wikiPages.pageprops.wikibase_item,
+                                title: formatPageTitle(title)
+                            });
                         }
-                    );
-                    
-                    const wikiPages = Object.values(wikiResponse.query.pages)[0];
-                    if (wikiPages.pageprops && wikiPages.pageprops.wikibase_item) {
-                        items.usage.push({
-                            id: wikiPages.pageprops.wikibase_item,
-                            title: formatPageTitle(title)
-                        });
+                    } catch (error) {
+                        console.error('Error fetching Wikidata ID for page:', title, error);
                     }
                 }
             }
@@ -155,7 +164,7 @@
             if (entity.depicts.length) {
                 const $depictsSection = $('<div>').text('Depicts: ');
                 entity.depicts.forEach((id, index) => {
-                    if (index > 0) $depictsSection.append($('<span>').addClass('separator').text('◊'));
+                    if (index > 0) $depictsSection.append($('<span>').addClass('separator').text('⧫'));
                     $depictsSection.append(
                         $('<a>')
                             .attr('href', 'https://www.wikidata.org/wiki/' + id)
@@ -172,15 +181,15 @@
             if (entity.usage.length) {
                 const $usageSection = $('<div>').text('Used in: ');
                 entity.usage.forEach((item, index) => {
-                    if (index > 0) $usageSection.append($('<span>').addClass('separator').text('◊'));
+                    if (index > 0) $usageSection.append($('<span>').addClass('separator').text('⧫'));
                     $usageSection.append(
                         $('<span>').text(item.title + ' ('),
                         $('<a>')
-                            .attr('href', 'https://www.wikidata.org/wiki/' + id)
+                            .attr('href', 'https://www.wikidata.org/wiki/' + item.id)
                             .text('Wikidata'),
                         $('<span>').addClass('separator').text('◊'),
                         $('<a>')
-                            .attr('href', 'https://reasonator.toolforge.org/?q=' + id + '&lang=en')
+                            .attr('href', 'https://reasonator.toolforge.org/?q=' + item.id + '&lang=en')
                             .text('Reasonator'),
                         $('<span>').text(')')
                     );
@@ -196,13 +205,17 @@
     }
 
     async function init() {
-        const entity = await getWikidataEntity();
-        if (!entity) return;
+        try {
+            const entity = await getWikidataEntity();
+            if (!entity) return;
 
-        const $links = createLinks(entity);
-        const $firstHeading = $('#firstHeading, .firstHeading');
-        if ($firstHeading.length) {
-            $firstHeading.after($links);
+            const $links = createLinks(entity);
+            const $firstHeading = $('#firstHeading, .firstHeading');
+            if ($firstHeading.length) {
+                $firstHeading.after($links);
+            }
+        } catch (error) {
+            console.error('Error in init:', error);
         }
     }
 
