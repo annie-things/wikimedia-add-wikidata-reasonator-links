@@ -2,49 +2,64 @@
 // @name         Wikidata and Reasonator Nav Links
 // @description  Adds Wikidata and Reasonator navigation links to Wikipedia, Wikidata, and Commons pages
 // @author       https://github.com/annie-things
-// @version      1.0
+// @version      1.2
 // @match        *://*.wikipedia.org/wiki/*
 // @match        *://*.wikidata.org/wiki/*
 // @match        *://*.wikimedia.org/wiki/*
 // @grant        none
 // ==/UserScript==
 
-(function() {
+// Wait for MediaWiki's ResourceLoader to be ready before accessing mw/$ globals.
+// The startup module is loaded async, so mw may not exist when the userscript fires.
+(window.RLQ = window.RLQ || []).push(function() {
     'use strict';
 
     // Only run on content pages
     if (mw.config.get('wgNamespaceNumber') < 0) return;
 
     // Add styles
-    mw.loader.addStyleTag(`
-        .wikidata-links {
-            font-size: 0.9em;
-            margin: 0.5em 0;
-            color: #54595d;
-        }
-        .wikidata-links a {
-            margin: 0 2px;
-        }
-        .wikidata-links .separator {
-            margin: 0 1px;
-            color: #a2a9b1;
-        }
-        .wikidata-links hr {
-            margin: 0.3em 0;
-            border: none;
-            border-top: 1px solid #eaecf0;
-        }
-    `);
+    var style = document.createElement('style');
+    style.textContent =
+        '.wikidata-links {' +
+        '    font-size: 0.9em;' +
+        '    margin: 0.5em 0;' +
+        '    color: #54595d;' +
+        '}' +
+        '.wikidata-links a {' +
+        '    margin: 0 2px;' +
+        '}' +
+        '.wikidata-links .separator {' +
+        '    margin: 0 1px;' +
+        '    color: #a2a9b1;' +
+        '}' +
+        '.wikidata-links hr {' +
+        '    margin: 0.3em 0;' +
+        '    border: none;' +
+        '    border-top: 1px solid #eaecf0;' +
+        '}';
+    document.head.appendChild(style);
 
     // Helper function to format page titles
     function formatPageTitle(title) {
         return title.replace(/_/g, ' ');
     }
 
+    // Detect which wiki we're on (wgDBname may not be in client-side config)
+    function getSiteName() {
+        var dbName = mw.config.get('wgDBname');
+        if (dbName) return dbName;
+        var host = location.hostname;
+        if (host.indexOf('wikidata.org') !== -1) return 'wikidatawiki';
+        if (host.indexOf('commons.wikimedia.org') !== -1) return 'commonswiki';
+        return 'other';
+    }
+
     function getWikidataEntity() {
         try {
+            var site = getSiteName();
+
             // For Wikidata pages
-            if (mw.config.get('wgDBname') === 'wikidatawiki') {
+            if (site === 'wikidatawiki') {
                 const pageTitle = mw.config.get('wgPageName');
                 if (pageTitle.match(/^Q\d+$/)) {
                     return pageTitle;
@@ -53,16 +68,14 @@
             }
 
             // For Commons files
-            if (mw.config.get('wgDBname') === 'commonswiki' && mw.config.get('wgNamespaceNumber') === 6) {
+            if (site === 'commonswiki' && mw.config.get('wgNamespaceNumber') === 6) {
                 return getCommonsWikidataItems();
             }
 
             // For Wikipedia and other projects
-            const $wikibaseLink = $('#t-wikibase a');
-            if ($wikibaseLink.length) {
-                const href = $wikibaseLink.attr('href');
-                const match = href.match(/\/wiki\/(Q\d+)$/);
-                return match ? match[1] : null;
+            const wikidataId = mw.config.get('wgWikibaseItemId');
+            if (wikidataId) {
+                return wikidataId;
             }
 
             return null;
@@ -116,7 +129,7 @@
             const pages = Object.values(usageResponse.query.pages)[0];
             if (pages.globalusage) {
                 const wikiTitles = pages.globalusage.map(usage => usage.title);
-                
+
                 // Get Wikidata IDs for the Wikipedia pages
                 for (const title of wikiTitles) {
                     try {
@@ -130,7 +143,7 @@
                                 origin: '*'
                             }
                         );
-                        
+
                         const wikiPages = Object.values(wikiResponse.query.pages)[0];
                         if (wikiPages.pageprops && wikiPages.pageprops.wikibase_item) {
                             items.usage.push({
@@ -152,7 +165,7 @@
 
     function createLinks(entity) {
         const $container = $('<div>').addClass('wikidata-links');
-        
+
         if (typeof entity === 'string' && entity.startsWith('Q')) {
             // Single entity (Wikipedia/Wikidata pages)
             $container.append(
@@ -215,15 +228,20 @@
             if (!entity) return;
 
             const $links = createLinks(entity);
-            const $firstHeading = $('#firstHeading, .firstHeading');
-            if ($firstHeading.length) {
-                $firstHeading.after($links);
+            var $body = $('#bodyContent');
+            if ($body.length) {
+                $body.prepend($links);
+            } else {
+                var $heading = $('#firstHeading, .firstHeading');
+                if ($heading.length) {
+                    $heading.after($links);
+                }
             }
         } catch (error) {
             console.error('Error in init:', error);
         }
     }
 
-    // Run the script when the page is ready
+    // Run when DOM is ready
     $(init);
-})();
+});
