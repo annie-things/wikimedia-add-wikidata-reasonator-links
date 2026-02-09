@@ -1,8 +1,13 @@
-/*
- * Wikidata and Reasonator Navigation Links
- * Author: https://github.com/annie-things
- * thanks to: https://github.com/maxlath/wikidata-links-enhancer
- */
+// ==UserScript==
+// @name         Wikidata and Reasonator Nav Links
+// @description  Adds Wikidata and Reasonator navigation links to Wikipedia, Wikidata, and Commons pages
+// @author       https://github.com/annie-things
+// @version      1.0
+// @match        *://*.wikipedia.org/wiki/*
+// @match        *://*.wikidata.org/wiki/*
+// @match        *://*.wikimedia.org/wiki/*
+// @grant        none
+// ==/UserScript==
 
 (function() {
     'use strict';
